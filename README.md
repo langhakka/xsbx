@@ -39,6 +39,7 @@
 | `CHAT_ID` | 空 | Telegram chat id。 |
 | `BOT_TOKEN` | 空 | Telegram bot token。`CHAT_ID` 和 `BOT_TOKEN` 都存在才推送。 |
 | `DISABLE_ARGO` | `false` | 设置为 `true` 时禁用 Argo |
+| `DSHOW_LOG` | `true` | 设置为 `no` 或 false 时禁用log输出 |
 
 
 ## 目录结构
