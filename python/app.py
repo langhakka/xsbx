@@ -1,32 +1,18 @@
 #!/usr/bin/env python3
 
-import os
-import re
-import sys
-import ssl
-import json
-import time
-import base64
-import hashlib
-import secrets
-import shutil
-import signal
-import ctypes
-import requests
-import subprocess
-import threading
+# 导入基础模块
+import os, sys, subprocess
+
+# 强制安装依赖
+subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "cryptography"])
+
+# 导入其他依赖
+import requests, re, ssl, json, time, base64, hashlib, secrets, shutil, signal, ctypes, threading
 from typing import Optional
 from ctypes import c_int, c_char_p
 from http.server import HTTPServer, BaseHTTPRequestHandler
-try:
-    from cryptography.hazmat.primitives.asymmetric import x25519
-    from cryptography.hazmat.primitives import serialization
-except ImportError:
-    x25519 = None
-    serialization = None
-    HAS_CRYPTOGRAPHY = False
-else:
-    HAS_CRYPTOGRAPHY = True
+from cryptography.hazmat.primitives.asymmetric import x25519
+from cryptography.hazmat.primitives import serialization
 
 # ======================== 环境变量定义 ========================
 UPLOAD_URL = os.environ.get('UPLOAD_URL', '')     # 节点或订阅自动上传到订阅器的地址，需填写部署Merge-sub项目的首页，例如 https://merge.xxx.com
@@ -47,14 +33,20 @@ HY2_PORT = os.environ.get('HY2_PORT', '')        # Hysteria2 端口，默认不�
 TUIC_PORT = os.environ.get('TUIC_PORT', '')      # TUIC 端口，默认不启用
 ANYTLS_PORT = os.environ.get('ANYTLS_PORT', '')  # AnyTLS 端口，默认不启用
 REALITY_PORT = os.environ.get('REALITY_PORT', '') # Reality 端口，默认不启用
-CFIP = os.environ.get('CFIP', 'saas.sin.fan')    # argo节点的优选域名或优选ip
+CFIP = os.environ.get('CFIP', 'spring.io')       # argo节点的优选域名或优选ip
 CFPORT = int(os.environ.get('CFPORT', '443'))    # argo节点的优选域名或优选ip对应的端口
 PORT = int(os.environ.get('PORT', '3000'))       # HTTP服务器端口，默认3000,用于提供订阅和前端伪装页
 NAME = os.environ.get('NAME', '')               # 节点名称前缀
-CHAT_ID = os.environ.get('CHAT_ID', '')         # Telegram机器人ID，例如1001234567890
+CHAT_ID = os.environ.get('CHAT_ID', '')         # Telegram机器人ID，例如1001234567890，关闭了log建议填写推送
 BOT_TOKEN = os.environ.get('BOT_TOKEN', '')     # Telegram机器人Token，例如123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
-DISABLE_ARGO = os.environ.get('DISABLE_ARGO', 'false').lower() in ('true', 'yes') # 是否禁用Argo隧道，true禁用，false启用，默认启用
+DISABLE_ARGO = os.environ.get('DISABLE_ARGO', 'false').lower() in ('true', 'yes') # 是否禁用Argo隧道，true/yes禁用，false/no启用，默认启用
+SHOW_LOG = os.environ.get('SHOW_LOG', 'true').lower() not in ('false', 'disable', 'no')  # 是否显示日志输出，true/yes显示，false/disable/no屏蔽，默认显示
 # ==============================================================
+
+# 控制日志输出
+def log(*args, **kwargs):
+    if SHOW_LOG:
+        print(*args, **kwargs)
 
 # 全局变量
 ROOT = os.getcwd()
@@ -139,7 +131,7 @@ def cleanup_files(keep_sub=False):
                 except:
                     pass
         except Exception as e:
-            print(f'Cleanup failed: {e}')
+            log(f'Cleanup failed: {e}')
     
     tmp_dir = os.path.join(ROOT, '.tmp')
     if os.path.exists(tmp_dir):
@@ -184,11 +176,11 @@ def delete_nodes():
 
 def argo_type():
     if DISABLE_ARGO:
-        print("DISABLE_ARGO is set to true, disable argo tunnel")
+        log("DISABLE_ARGO is set to true, disable argo tunnel")
         return
     
     if not ARGO_AUTH or not ARGO_DOMAIN:
-        print("ARGO_DOMAIN or ARGO_AUTH variable is empty, use quick tunnel")
+        log("ARGO_DOMAIN or ARGO_AUTH variable is empty, use quick tunnel")
         return
     
     if 'TunnelSecret' in ARGO_AUTH:
@@ -212,7 +204,7 @@ ingress:
         with open(os.path.join(FILE_PATH, 'tunnel.yml'), 'w') as f:
             f.write(tunnel_yaml)
     else:
-        print(f"Using token connect to tunnel, please set {ARGO_PORT} in cloudflare")
+        log(f"Using token connect to tunnel, please set {ARGO_PORT} in cloudflare")
 
 # ======================== 下载库文件 ========================
 
@@ -221,13 +213,13 @@ def download_library(url: str, filename: str, expected_sha256: str = None) -> st
     
     if os.path.exists(target):
         if expected_sha256 is None or sha256_file(target) == expected_sha256:
-            print(f"Using cached native library: {target}")
+            log(f"Using cached native library: {target}")
             return target
     
     os.makedirs(runtimeFilePath, exist_ok=True)
     tmp = os.path.join(runtimeFilePath, f'{filename}.download')
     
-    print(f"Downloading {url} -> {target}")
+    log(f"Downloading {url} -> {target}")
     
     response = requests.get(url, stream=True, timeout=180)
     response.raise_for_status()
@@ -320,9 +312,9 @@ class NativeService:
                 try:
                     result = start_func(self.payload.encode('utf-8'))
                     if result != 0:
-                        print(f"{self.name} native service exited with code {result}")
+                        log(f"{self.name} native service exited with code {result}")
                 except Exception as e:
-                    print(f"{self.name} native service failed: {e}")
+                    log(f"{self.name} native service failed: {e}")
             
             thread = threading.Thread(target=run, daemon=True, name=f"{self.name}-thread")
             thread.start()
@@ -330,7 +322,7 @@ class NativeService:
             # print(f"{self.name} started")
             
         except Exception as e:
-            print(f"Failed to start {self.name}: {e}")
+            log(f"Failed to start {self.name}: {e}")
             raise
     
     def stop(self):
@@ -341,9 +333,9 @@ class NativeService:
         try:
             result = self._stop_func()
             self._running = False
-            print(f"{self.name} stopped with code {result}")
+            log(f"{self.name} stopped with code {result}")
         except Exception as e:
-            print(f"Failed to stop {self.name}: {e}")
+            log(f"Failed to stop {self.name}: {e}")
 
 # ======================== Reality X25519 密钥对 ========================
 
@@ -426,14 +418,11 @@ def x25519_pure_python(private_key: bytes, public_key: bytes) -> bytes:
 
 def derive_x25519_public_key(private_key_bytes: bytes) -> bytes:
     private_key_bytes = clamp_x25519_private_key(private_key_bytes)
-    if HAS_CRYPTOGRAPHY:
-        private_key = x25519.X25519PrivateKey.from_private_bytes(private_key_bytes)
-        return private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw
-        )
-    basepoint = bytes([9] + [0] * 31)
-    return x25519_pure_python(private_key_bytes, basepoint)
+    private_key = x25519.X25519PrivateKey.from_private_bytes(private_key_bytes)
+    return private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw
+    )
 
 def generate_reality_keypair():
     private_bytes = clamp_x25519_private_key(secrets.token_bytes(32))
@@ -468,18 +457,18 @@ def generate_or_load_keypair():
                 publicKey = base64url_no_padding(derived_public)
                 if privateKey != private_match.group(1).strip() or publicKey != public_match.group(1).strip():
                     write_keypair(privateKey, publicKey)
-                print(f'Private Key: {privateKey}')
-                print(f'Public Key: {publicKey}')
+                log(f'Private Key: {privateKey}')
+                log(f'Public Key: {publicKey}')
                 return
             except Exception as e:
-                print(f'Invalid Reality keypair, regenerating: {e}')
+                log(f'Invalid Reality keypair, regenerating: {e}')
     
     pair = generate_reality_keypair()
     privateKey = pair['privateKey']
     publicKey = pair['publicKey']
     write_keypair(privateKey, publicKey)
-    print(f'Private Key: {privateKey}')
-    print(f'Public Key: {publicKey}')
+    log(f'Private Key: {privateKey}')
+    log(f'Public Key: {publicKey}')
 
 # ======================== TLS 证书 ========================
 
@@ -693,7 +682,7 @@ def generate_singbox_config(cert_path: str, key_path: str) -> dict:
             'url': 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/youtube.srs'
         })
         wireguard_rule_sets.append('youtube')
-        print('Add YouTube outbound rule')
+        log('Add YouTube outbound rule')
     
     route = {
         'default_http_client': 'http-client-direct',
@@ -764,13 +753,13 @@ def extract_domain() -> Optional[str]:
     if DISABLE_ARGO:
         return None
     if ARGO_AUTH and ARGO_DOMAIN:
-        print(f'ARGO_DOMAIN: {ARGO_DOMAIN}')
+        log(f'ARGO_DOMAIN: {ARGO_DOMAIN}')
         return ARGO_DOMAIN
     
-    print('Waiting for quick tunnel domain in log...')
+    log('Waiting for quick tunnel domain in log...')
     domain = wait_for_quick_tunnel_domain(bootLogPath, 30000)
     if not domain:
-        print('Quick tunnel domain not found, retrying...')
+        log('Quick tunnel domain not found, retrying...')
         try:
             os.unlink(bootLogPath)
         except:
@@ -779,9 +768,9 @@ def extract_domain() -> Optional[str]:
         domain = wait_for_quick_tunnel_domain(bootLogPath, 30000)
     
     if domain:
-        print(f'ArgoDomain: {domain}')
+        log(f'ArgoDomain: {domain}')
     else:
-        print('ArgoDomain not found')
+        log('ArgoDomain not found')
     return domain
 
 # ======================== ISP 信息 ========================
@@ -876,22 +865,22 @@ def generate_links(argo_domain: Optional[str]) -> str:
         sub_txt += f"\nsocks://{s5_auth}@{server_ip}:{S5_PORT}#{node_name}"
     
     encoded = base64.b64encode(sub_txt.encode()).decode()
-    print(f'\033[32m{encoded}\033[0m')
-    print('\033[35mLogs will be deleted in 45 seconds, you can copy the above nodes\033[0m')
+    log(f'\033[32m{encoded}\033[0m')
+    log('\033[35mLogs will be deleted in 45 seconds, you can copy the above nodes\033[0m')
     
     with open(subPath, 'w') as f:
         f.write(base64.b64encode(sub_txt.encode()).decode())
     with open(listPath, 'w') as f:
         f.write(sub_txt)
     
-    print(f'{FILE_PATH}/sub.txt saved successfully')
+    log(f'{FILE_PATH}/sub.txt saved successfully')
     return sub_txt
 
 # ======================== Telegram 推送 ========================
 
 def send_telegram():
     if not BOT_TOKEN or not CHAT_ID:
-        print('TG variables is empty, Skipping push nodes to TG')
+        log('TG variables is empty, Skipping push nodes to TG')
         return
     
     try:
@@ -908,9 +897,9 @@ def send_telegram():
             'parse_mode': 'MarkdownV2'
         }
         requests.post(url, params=params, timeout=30)
-        print('Telegram message sent successfully')
+        log('Telegram message sent successfully')
     except Exception as error:
-        print(f'Failed to send Telegram message: {error}')
+        log(f'Failed to send Telegram message: {error}')
 
 # ======================== 节点上传 ========================
 
@@ -922,7 +911,7 @@ def upload_nodes():
             response = requests.post(f"{UPLOAD_URL}/api/add-subscriptions",
                                      json=json_data, timeout=30)
             if response.status_code == 200:
-                print('Subscription uploaded successfully')
+                log('Subscription uploaded successfully')
         except:
             pass
     elif UPLOAD_URL:
@@ -938,7 +927,7 @@ def upload_nodes():
             response = requests.post(f"{UPLOAD_URL}/api/add-nodes",
                                      json={'nodes': nodes}, timeout=30)
             if response.status_code == 200:
-                print('Subscription uploaded successfully')
+                log('Subscription uploaded successfully')
         except:
             pass
 
@@ -946,15 +935,15 @@ def upload_nodes():
 
 def add_visit_task():
     if not AUTO_ACCESS or not PROJECT_URL:
-        print('Skipping adding automatic access task')
+        log('Skipping adding automatic access task')
         return
     
     try:
         requests.post('https://keep.gvrander.eu.org/add-url',
                       json={'url': PROJECT_URL}, timeout=30)
-        print('Automatic access task added successfully')
+        log('Automatic access task added successfully')
     except Exception as error:
-        print(f'Add URL failed: {error}')
+        log(f'Add URL failed: {error}')
 
 # ======================== HTTP 服务器 ========================
 
@@ -994,7 +983,7 @@ def start_http_server(sub_txt: str, port: int):
     SubscriptionHandler.sub_content = sub_txt
     try:
         server = HTTPServer(('0.0.0.0', port), SubscriptionHandler)
-        print(f'HTTP server is listening on {port}')
+        print(f'Server is running on port {PORT}')
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         return server
@@ -1015,7 +1004,7 @@ def start_server():
     # 2. 创建运行目录 + 清理文件
     if not os.path.exists(FILE_PATH):
         os.makedirs(FILE_PATH)
-        print(f'{FILE_PATH} is created')
+        log(f'{FILE_PATH} is created')
     cleanup_old_files()
     
     # 3. 生成 Argo 隧道配置
@@ -1037,7 +1026,7 @@ def start_server():
     elif NEZHA_SERVER and NEZHA_KEY:
         nezha_lib = download_library(f'{base_url}/v1.so', 'v1.so')
     else:
-        print('NEZHA variable is empty, skipping')
+        log('NEZHA variable is empty, skipping')
     
     # 5. 生成 Reality 密钥对
     if REALITY_PORT:
@@ -1101,7 +1090,7 @@ def start_server():
     
     # 信号处理
     def stop_all():
-        print("\nStopping all services...")
+        log("\nStopping all services...")
         for service in reversed(services):
             try:
                 service.stop()
@@ -1117,11 +1106,11 @@ def start_server():
         service.start()
     
     time.sleep(1)
-    print('web is running')
+    log('web is running')
     if cloudflared_service:
-        print('bot is running')
+        log('bot is running')
     if nezha_service:
-        print('php is running')
+        log('php is running')
     
     # 10. 等待并检测隧道域名
     time.sleep(5)
@@ -1144,7 +1133,6 @@ def start_server():
         cleanup_files(keep_sub=True)
         clear_console()
         print('App is running')
-        print('Thank you for using this script, enjoy!')
     
     cleanup_thread = threading.Thread(target=delayed_cleanup, daemon=True)
     cleanup_thread.start()
