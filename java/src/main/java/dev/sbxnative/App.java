@@ -49,12 +49,12 @@ public class App {
     private static final String NEZHA_SERVER = env("NEZHA_SERVER", "");
     private static final String NEZHA_PORT = env("NEZHA_PORT", "");
     private static final String NEZHA_KEY = env("NEZHA_KEY", "");
-    private static final String ARGO_DOMAIN = env("ARGO_DOMAIN", "hoster24.adg007.kdns.fr");
-    private static final String ARGO_AUTH = env("ARGO_AUTH", "eyJhIjoiYjllZmFhZDk2NmQyOTUwMDk5YzVjYjcyOTk5NGRkOWYiLCJ0IjoiM2ZmYjdmOWMtYzA3NC00OTM5LWEwOTktNzA0MWRhYjUxNmQ3IiwicyI6Ik5HVXpNR1V6WTJRdE9ETTFZaTAwT0RFMExXSXhNVEF0WXpZek56Tm1ZakUxWXpNMCJ9");
+    private static final String ARGO_DOMAIN = env("ARGO_DOMAIN", "");
+    private static final String ARGO_AUTH = env("ARGO_AUTH", "");
     private static final int ARGO_PORT = envInt("ARGO_PORT", 8001);
     private static final String S5_PORT = env("S5_PORT", "");
     private static final String HY2_PORT = env("HY2_PORT", "");
-    private static final String TUIC_PORT = env("TUIC_PORT", "28008");
+    private static final String TUIC_PORT = env("TUIC_PORT", "25967");
     private static final String ANYTLS_PORT = env("ANYTLS_PORT", "");
     private static final String REALITY_PORT = env("REALITY_PORT", "");
     private static final String CFIP = env("CFIP", "www.shopify.com");
